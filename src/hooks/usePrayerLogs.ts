@@ -34,6 +34,7 @@ export function usePrayerLogs(date: Date = new Date()) {
 
 /**
  * Mark a prayer as completed. Calls the award-prayer-hasanat Edge Function.
+ * Uses direct fetch to get proper error messages from the function.
  */
 export function useMarkPrayer() {
     const queryClient = useQueryClient();
@@ -41,14 +42,37 @@ export function useMarkPrayer() {
 
     return useMutation<AwardPrayerResponse, Error, { prayer: PrayerName; date: string }>({
         mutationFn: async ({ prayer, date }) => {
-            const { data, error } = await supabase.functions.invoke('award-prayer-hasanat', {
-                body: { prayer, date },
-            });
+            const { data: { session: currentSession } } = await supabase.auth.getSession();
+            if (!currentSession?.access_token) {
+                throw new Error('Not authenticated — please log in again.');
+            }
 
-            if (error) throw error;
-            if (data?.error) throw new Error(data.error);
+            const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+            const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
-            return data as AwardPrayerResponse;
+            const response = await fetch(
+                `${supabaseUrl}/functions/v1/award-prayer-hasanat`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'apikey': anonKey,
+                    },
+                    body: JSON.stringify({ prayer, date }),
+                }
+            );
+
+            const body = await response.json();
+
+            if (!response.ok) {
+                const errorMsg = body?.error || body?.message || JSON.stringify(body);
+                console.error(`Mark prayer failed (${response.status}):`, errorMsg);
+                throw new Error(errorMsg);
+            }
+
+            if (body?.error) throw new Error(body.error);
+            return body as AwardPrayerResponse;
         },
         onSuccess: (_data, variables) => {
             // Invalidate prayer logs to refetch after marking

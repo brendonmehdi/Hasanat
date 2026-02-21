@@ -37,6 +37,43 @@ export function useFastingStatus(date: Date = new Date()) {
 }
 
 /**
+ * Helper: call an Edge Function via direct fetch for proper error messages.
+ */
+async function invokeEdgeFunction(functionName: string, body: object) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+        throw new Error('Not authenticated — please log in again.');
+    }
+
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+
+    const response = await fetch(
+        `${supabaseUrl}/functions/v1/${functionName}`,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+                'apikey': anonKey,
+            },
+            body: JSON.stringify(body),
+        }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        const errorMsg = data?.error || data?.message || JSON.stringify(data);
+        console.error(`Edge Function ${functionName} failed (${response.status}):`, errorMsg);
+        throw new Error(errorMsg);
+    }
+
+    if (data?.error) throw new Error(data.error);
+    return data;
+}
+
+/**
  * Set fasting status for today. Calls the set-fasting-status Edge Function.
  */
 export function useSetFasting() {
@@ -45,12 +82,7 @@ export function useSetFasting() {
 
     return useMutation({
         mutationFn: async ({ isFasting, date }: { isFasting: boolean; date: string }) => {
-            const { data, error } = await supabase.functions.invoke('set-fasting-status', {
-                body: { isFasting, date },
-            });
-            if (error) throw error;
-            if (data?.error) throw new Error(data.error);
-            return data;
+            return invokeEdgeFunction('set-fasting-status', { isFasting, date });
         },
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({
@@ -70,12 +102,7 @@ export function useBreakFast() {
 
     return useMutation({
         mutationFn: async ({ date }: { date: string }) => {
-            const { data, error } = await supabase.functions.invoke('break-fast', {
-                body: { date },
-            });
-            if (error) throw error;
-            if (data?.error) throw new Error(data.error);
-            return data;
+            return invokeEdgeFunction('break-fast', { date });
         },
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({
