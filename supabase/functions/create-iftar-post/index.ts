@@ -47,8 +47,8 @@ serve(async (req: Request) => {
             );
         }
 
-        // Validate S3 key ownership — must start with users/{callerId}/
-        const expectedPrefix = `users/${userId}/`;
+        // Validate key ownership — must start with {callerId}/
+        const expectedPrefix = `${userId}/`;
         if (!imageKey.startsWith(expectedPrefix)) {
             return new Response(
                 JSON.stringify({ error: 'Invalid image key. You can only use your own uploaded files.' }),

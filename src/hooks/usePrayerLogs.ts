@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 import { toDateString } from '../lib/aladhan';
+import { invokeEdgeFunction } from '../lib/edgeFn';
 import type { PrayerLog, PrayerName, AwardPrayerResponse } from '../types';
 
 /**
@@ -34,7 +35,6 @@ export function usePrayerLogs(date: Date = new Date()) {
 
 /**
  * Mark a prayer as completed. Calls the award-prayer-hasanat Edge Function.
- * Uses direct fetch to get proper error messages from the function.
  */
 export function useMarkPrayer() {
     const queryClient = useQueryClient();
@@ -42,56 +42,12 @@ export function useMarkPrayer() {
 
     return useMutation<AwardPrayerResponse, Error, { prayer: PrayerName; date: string }>({
         mutationFn: async ({ prayer, date }) => {
-            // Force refresh session if token is expiring soon
-            let accessToken: string | undefined;
-            const { data: { session: currentSession } } = await supabase.auth.getSession();
-            if (currentSession?.access_token) {
-                const expiresAt = currentSession.expires_at ?? 0;
-                const isExpiring = expiresAt * 1000 - Date.now() < 60_000;
-                if (isExpiring) {
-                    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-                    accessToken = refreshed?.access_token;
-                } else {
-                    accessToken = currentSession.access_token;
-                }
-            }
-            if (!accessToken) {
-                throw new Error('Not authenticated — please log in again.');
-            }
-
-            const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-            const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
-
-            const response = await fetch(
-                `${supabaseUrl}/functions/v1/award-prayer-hasanat`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${accessToken}`,
-                        'apikey': anonKey,
-                    },
-                    body: JSON.stringify({ prayer, date }),
-                }
-            );
-
-            const body = await response.json();
-
-            if (!response.ok) {
-                const errorMsg = body?.error || body?.message || JSON.stringify(body);
-                console.error(`Mark prayer failed (${response.status}):`, errorMsg);
-                throw new Error(errorMsg);
-            }
-
-            if (body?.error) throw new Error(body.error);
-            return body as AwardPrayerResponse;
+            return invokeEdgeFunction<AwardPrayerResponse>('award-prayer-hasanat', { prayer, date });
         },
         onSuccess: (_data, variables) => {
-            // Invalidate prayer logs to refetch after marking
             queryClient.invalidateQueries({
                 queryKey: ['prayerLogs', session?.user?.id, variables.date],
             });
-            // Also invalidate totals
             queryClient.invalidateQueries({ queryKey: ['hasanatTotals'] });
         },
     });

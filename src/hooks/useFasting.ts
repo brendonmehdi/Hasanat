@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 import { toDateString } from '../lib/aladhan';
+import { invokeEdgeFunction } from '../lib/edgeFn';
 import type { FastingLog } from '../types';
 
 /**
@@ -25,7 +26,6 @@ export function useFastingStatus(date: Date = new Date()) {
                 .single();
 
             if (error && error.code === 'PGRST116') {
-                // No rows — not fasting today
                 return null;
             }
             if (error) throw error;
@@ -34,60 +34,6 @@ export function useFastingStatus(date: Date = new Date()) {
         enabled: !!profile?.id,
         staleTime: 1000 * 60 * 2,
     });
-}
-
-/**
- * Helper: call an Edge Function via direct fetch for proper error messages.
- */
-async function invokeEdgeFunction(functionName: string, body: object) {
-    // Force refresh the session to get a non-expired JWT
-    // getSession() can return stale tokens; refreshSession() ensures a fresh one
-    let accessToken: string | undefined;
-
-    const { data: { session: currentSession } } = await supabase.auth.getSession();
-    if (currentSession?.access_token) {
-        // Check if token expires within the next 60 seconds
-        const expiresAt = currentSession.expires_at ?? 0;
-        const isExpiring = expiresAt * 1000 - Date.now() < 60_000;
-
-        if (isExpiring) {
-            const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-            accessToken = refreshed?.access_token;
-        } else {
-            accessToken = currentSession.access_token;
-        }
-    }
-
-    if (!accessToken) {
-        throw new Error('Not authenticated — please log in again.');
-    }
-
-    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
-
-    const response = await fetch(
-        `${supabaseUrl}/functions/v1/${functionName}`,
-        {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`,
-                'apikey': anonKey,
-            },
-            body: JSON.stringify(body),
-        }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-        const errorMsg = data?.error || data?.message || JSON.stringify(data);
-        console.error(`Edge Function ${functionName} failed (${response.status}):`, errorMsg);
-        throw new Error(errorMsg);
-    }
-
-    if (data?.error) throw new Error(data.error);
-    return data;
 }
 
 /**

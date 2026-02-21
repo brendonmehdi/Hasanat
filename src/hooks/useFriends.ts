@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
+import { invokeEdgeFunction } from '../lib/edgeFn';
 import type { Profile, FriendRequest } from '../types';
 
 // ─── Types ─────────────────────────────────────────────────────
@@ -84,16 +85,10 @@ export function usePendingRequests() {
  */
 export function useSendFriendRequest() {
     const queryClient = useQueryClient();
-    const session = useAuthStore((s) => s.session);
 
     return useMutation({
         mutationFn: async ({ username }: { username: string }) => {
-            const { data, error } = await supabase.functions.invoke('friend-request', {
-                body: { username },
-            });
-            if (error) throw error;
-            if (data?.error) throw new Error(data.error);
-            return data;
+            return invokeEdgeFunction('friend-request', { username });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['friends'] });
@@ -110,12 +105,7 @@ export function useAcceptFriendRequest() {
 
     return useMutation({
         mutationFn: async ({ requestId }: { requestId: string }) => {
-            const { data, error } = await supabase.functions.invoke('accept-friend-request', {
-                body: { requestId },
-            });
-            if (error) throw error;
-            if (data?.error) throw new Error(data.error);
-            return data;
+            return invokeEdgeFunction('accept-friend-request', { requestId });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['friends'] });
@@ -133,12 +123,7 @@ export function useDeclineFriendRequest() {
 
     return useMutation({
         mutationFn: async ({ requestId }: { requestId: string }) => {
-            const { data, error } = await supabase.functions.invoke('decline-friend-request', {
-                body: { requestId },
-            });
-            if (error) throw error;
-            if (data?.error) throw new Error(data.error);
-            return data;
+            return invokeEdgeFunction('decline-friend-request', { requestId });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['pendingRequests'] });
@@ -154,12 +139,7 @@ export function useRemoveFriend() {
 
     return useMutation({
         mutationFn: async ({ friendId }: { friendId: string }) => {
-            const { data, error } = await supabase.functions.invoke('remove-friend', {
-                body: { friendId },
-            });
-            if (error) throw error;
-            if (data?.error) throw new Error(data.error);
-            return data;
+            return invokeEdgeFunction('remove-friend', { friendId });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['friends'] });
@@ -176,12 +156,7 @@ export function useBlockUser() {
 
     return useMutation({
         mutationFn: async ({ userId }: { userId: string }) => {
-            const { data, error } = await supabase.functions.invoke('block-user', {
-                body: { userId },
-            });
-            if (error) throw error;
-            if (data?.error) throw new Error(data.error);
-            return data;
+            return invokeEdgeFunction('block-user', { userId });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['friends'] });

@@ -1,44 +1,58 @@
-// src/lib/s3.ts — S3 presigned upload helper
+// src/lib/s3.ts — Upload helper using Supabase Storage
+// Uses Supabase's built-in Storage instead of AWS S3 for reliability.
 import { supabase } from './supabase';
-import type { PresignResponse } from '../types';
+
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
 
 /**
- * Get a presigned S3 URL for uploading, then upload the file.
- * Returns the object key for use in createIftarPost.
+ * Upload an image to Supabase Storage.
+ * Returns the object path and public URL for use in createIftarPost.
  */
 export async function uploadToS3(
     fileUri: string,
     contentType: string,
     purpose: 'iftar' | 'profile',
 ): Promise<{ objectKey: string; publicUrl: string }> {
-    // 1. Get presigned URL from Edge Function
-    const { data, error } = await supabase.functions.invoke('presign-s3-upload', {
-        body: { contentType, purpose },
-    });
+    // 1. Validate content type
+    if (!ALLOWED_TYPES.includes(contentType)) {
+        throw new Error(`Invalid content type. Allowed: ${ALLOWED_TYPES.join(', ')}`);
+    }
 
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
+    // 2. Get current user
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) {
+        throw new Error('Not authenticated — please log in again.');
+    }
 
-    const presign = data as PresignResponse;
+    // 3. Generate object key
+    const ext = contentType.split('/')[1] === 'jpeg' ? 'jpg' : contentType.split('/')[1];
+    const fileId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const objectKey = `${session.user.id}/${purpose}/${fileId}.${ext}`;
 
-    // 2. Upload file to S3 via presigned PUT URL
+    // 4. Fetch file as blob
     const fileResponse = await fetch(fileUri);
     const blob = await fileResponse.blob();
 
-    const uploadRes = await fetch(presign.presignedUrl, {
-        method: 'PUT',
-        headers: {
-            'Content-Type': contentType,
-        },
-        body: blob,
-    });
+    // 5. Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+        .from('uploads')
+        .upload(objectKey, blob, {
+            contentType,
+            upsert: false,
+        });
 
-    if (!uploadRes.ok) {
-        throw new Error(`S3 upload failed: ${uploadRes.status} ${uploadRes.statusText}`);
+    if (error) {
+        console.error('Supabase Storage upload error:', error);
+        throw new Error(`Upload failed: ${error.message}`);
     }
 
+    // 6. Get public URL
+    const { data: urlData } = supabase.storage
+        .from('uploads')
+        .getPublicUrl(data.path);
+
     return {
-        objectKey: presign.objectKey,
-        publicUrl: presign.publicUrl,
+        objectKey: data.path,
+        publicUrl: urlData.publicUrl,
     };
 }

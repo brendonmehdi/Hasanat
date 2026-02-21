@@ -2,6 +2,7 @@
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
+import { invokeEdgeFunction } from '../lib/edgeFn';
 import type { IftarPost, PostReaction, PostComment, ReactionType } from '../types';
 
 // ─── Types ─────────────────────────────────────────────────────
@@ -100,12 +101,7 @@ export function useReactToPost() {
 
     return useMutation({
         mutationFn: async ({ postId, reaction }: { postId: string; reaction: ReactionType }) => {
-            const { data, error } = await supabase.functions.invoke('react-to-post', {
-                body: { postId, reaction },
-            });
-            if (error) throw error;
-            if (data?.error) throw new Error(data.error);
-            return data;
+            return invokeEdgeFunction('react-to-post', { postId, reaction });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['feed'] });
@@ -121,12 +117,7 @@ export function useCommentOnPost() {
 
     return useMutation({
         mutationFn: async ({ postId, content }: { postId: string; content: string }) => {
-            const { data, error } = await supabase.functions.invoke('comment-on-post', {
-                body: { postId, content },
-            });
-            if (error) throw error;
-            if (data?.error) throw new Error(data.error);
-            return data;
+            return invokeEdgeFunction('comment-on-post', { postId, content });
         },
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: ['feed'] });
@@ -142,13 +133,8 @@ export function useCreatePost() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ imageKey, caption }: { imageKey: string; caption?: string }) => {
-            const { data, error } = await supabase.functions.invoke('create-iftar-post', {
-                body: { imageKey, caption },
-            });
-            if (error) throw error;
-            if (data?.error) throw new Error(data.error);
-            return data;
+        mutationFn: async ({ imageKey, imageUrl, caption }: { imageKey: string; imageUrl: string; caption?: string }) => {
+            return invokeEdgeFunction('create-iftar-post', { imageKey, imageUrl, caption });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['feed'] });
