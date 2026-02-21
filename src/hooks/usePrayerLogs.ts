@@ -42,8 +42,20 @@ export function useMarkPrayer() {
 
     return useMutation<AwardPrayerResponse, Error, { prayer: PrayerName; date: string }>({
         mutationFn: async ({ prayer, date }) => {
+            // Force refresh session if token is expiring soon
+            let accessToken: string | undefined;
             const { data: { session: currentSession } } = await supabase.auth.getSession();
-            if (!currentSession?.access_token) {
+            if (currentSession?.access_token) {
+                const expiresAt = currentSession.expires_at ?? 0;
+                const isExpiring = expiresAt * 1000 - Date.now() < 60_000;
+                if (isExpiring) {
+                    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+                    accessToken = refreshed?.access_token;
+                } else {
+                    accessToken = currentSession.access_token;
+                }
+            }
+            if (!accessToken) {
                 throw new Error('Not authenticated — please log in again.');
             }
 
@@ -56,7 +68,7 @@ export function useMarkPrayer() {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${currentSession.access_token}`,
+                        'Authorization': `Bearer ${accessToken}`,
                         'apikey': anonKey,
                     },
                     body: JSON.stringify({ prayer, date }),

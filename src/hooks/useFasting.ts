@@ -40,8 +40,25 @@ export function useFastingStatus(date: Date = new Date()) {
  * Helper: call an Edge Function via direct fetch for proper error messages.
  */
 async function invokeEdgeFunction(functionName: string, body: object) {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
+    // Force refresh the session to get a non-expired JWT
+    // getSession() can return stale tokens; refreshSession() ensures a fresh one
+    let accessToken: string | undefined;
+
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    if (currentSession?.access_token) {
+        // Check if token expires within the next 60 seconds
+        const expiresAt = currentSession.expires_at ?? 0;
+        const isExpiring = expiresAt * 1000 - Date.now() < 60_000;
+
+        if (isExpiring) {
+            const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+            accessToken = refreshed?.access_token;
+        } else {
+            accessToken = currentSession.access_token;
+        }
+    }
+
+    if (!accessToken) {
         throw new Error('Not authenticated — please log in again.');
     }
 
@@ -54,7 +71,7 @@ async function invokeEdgeFunction(functionName: string, body: object) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session.access_token}`,
+                'Authorization': `Bearer ${accessToken}`,
                 'apikey': anonKey,
             },
             body: JSON.stringify(body),
