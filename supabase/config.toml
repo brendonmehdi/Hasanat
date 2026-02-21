@@ -1,9 +1,6 @@
 # supabase/config.toml — Supabase project configuration
 # Docs: https://supabase.com/docs/guides/cli/config
 
-[project]
-id = "hasanat"
-
 [api]
 enabled = true
 port = 54321
