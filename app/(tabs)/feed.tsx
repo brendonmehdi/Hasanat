@@ -121,7 +121,7 @@ function CommentSheet({
 function PostCard({ post, onComment, onDelete }: {
     post: any;
     onComment: (id: string) => void;
-    onDelete: (id: string) => void;
+    onDelete: (id: string, imageKey?: string) => void;
 }) {
     const userId = useAuthStore((s) => s.session?.user?.id);
     const reactToPost = useReactToPost();
@@ -160,7 +160,7 @@ function PostCard({ post, onComment, onDelete }: {
                 {isOwner && (
                     <TouchableOpacity
                         style={styles.deleteBtn}
-                        onPress={() => onDelete(post.id)}
+                        onPress={() => onDelete(post.id, post.image_key)}
                     >
                         <Text style={styles.deleteBtnText}>🗑️</Text>
                     </TouchableOpacity>
@@ -320,7 +320,7 @@ export default function FeedScreen() {
         }
     };
 
-    const handleDelete = (postId: string) => {
+    const handleDelete = (postId: string, imageKey?: string) => {
         Alert.alert(
             'Delete Post',
             'Are you sure you want to delete this post?',
@@ -331,7 +331,7 @@ export default function FeedScreen() {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await deletePost.mutateAsync({ postId });
+                            await deletePost.mutateAsync({ postId, imageKey });
                         } catch (err: any) {
                             Alert.alert('Error', err.message || 'Failed to delete post.');
                         }
@@ -374,7 +374,7 @@ export default function FeedScreen() {
                     data={posts}
                     keyExtractor={(item) => item.id}
                     renderItem={({ item }) => (
-                        <PostCard post={item} onComment={setCommentPostId} onDelete={handleDelete} />
+                        <PostCard post={item} onComment={setCommentPostId} onDelete={(id, key) => handleDelete(id, key)} />
                     )}
                     contentContainerStyle={styles.listContent}
                     onEndReached={() => {

@@ -1,14 +1,19 @@
-// app/(tabs)/profile.tsx — Profile screen with stats, friends link, sign out
-import { useCallback } from 'react';
+// app/(tabs)/profile.tsx — Profile screen with editable name, photo, stats, friends
+import { useState, useCallback } from 'react';
 import {
     View, Text, TouchableOpacity, StyleSheet, Alert,
-    ScrollView, RefreshControl,
+    ScrollView, TextInput, Image, ActivityIndicator,
+    Platform, ActionSheetIOS,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useHasanatTotals } from '../../src/hooks/useHasanatTotals';
 import { useFriendsList, usePendingRequests } from '../../src/hooks/useFriends';
+import { supabase } from '../../src/lib/supabase';
+import { uploadToS3 } from '../../src/lib/s3';
+import { useAuthStore } from '../../src/stores/authStore';
 import { COLORS } from '../../src/constants';
 
 export default function ProfileScreen() {
@@ -17,6 +22,12 @@ export default function ProfileScreen() {
     const { data: totals } = useHasanatTotals();
     const { data: friends } = useFriendsList();
     const { data: pending } = usePendingRequests();
+    const setProfile = useAuthStore((s) => s.setProfile);
+
+    const [editingName, setEditingName] = useState(false);
+    const [newName, setNewName] = useState(profile?.display_name || '');
+    const [savingName, setSavingName] = useState(false);
+    const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
     const handleSignOut = () => {
         Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -25,6 +36,122 @@ export default function ProfileScreen() {
         ]);
     };
 
+    // ─── Edit Display Name ──────────────────────────────────
+    const handleEditName = () => {
+        setNewName(profile?.display_name || '');
+        setEditingName(true);
+    };
+
+    const handleSaveName = async () => {
+        const trimmed = newName.trim();
+        if (!trimmed) {
+            Alert.alert('Error', 'Display name cannot be empty.');
+            return;
+        }
+        if (trimmed.length > 50) {
+            Alert.alert('Error', 'Display name must be 50 characters or less.');
+            return;
+        }
+
+        setSavingName(true);
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({ display_name: trimmed })
+                .eq('id', profile?.id);
+
+            if (error) throw error;
+
+            // Update local state
+            if (profile) {
+                setProfile({ ...profile, display_name: trimmed });
+            }
+            setEditingName(false);
+            Alert.alert('Updated!', 'Your display name has been changed.');
+        } catch (err: any) {
+            Alert.alert('Error', err.message || 'Failed to update name.');
+        } finally {
+            setSavingName(false);
+        }
+    };
+
+    // ─── Profile Photo ──────────────────────────────────────
+    const handleChangePhoto = useCallback(() => {
+        if (Platform.OS === 'ios') {
+            ActionSheetIOS.showActionSheetWithOptions(
+                {
+                    options: ['Cancel', '📷 Take Photo', '🖼️ Choose from Library'],
+                    cancelButtonIndex: 0,
+                },
+                (buttonIndex) => {
+                    if (buttonIndex === 1) pickPhoto('camera');
+                    if (buttonIndex === 2) pickPhoto('library');
+                },
+            );
+        } else {
+            Alert.alert('Profile Photo', 'Choose an option', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: '📷 Take Photo', onPress: () => pickPhoto('camera') },
+                { text: '🖼️ Choose from Library', onPress: () => pickPhoto('library') },
+            ]);
+        }
+    }, []);
+
+    const pickPhoto = async (source: 'camera' | 'library') => {
+        try {
+            let result: ImagePicker.ImagePickerResult;
+
+            if (source === 'camera') {
+                const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                if (status !== 'granted') {
+                    Alert.alert('Permission needed', 'Camera access is required.');
+                    return;
+                }
+                result = await ImagePicker.launchCameraAsync({
+                    allowsEditing: true,
+                    aspect: [1, 1],
+                    quality: 0.8,
+                });
+            } else {
+                result = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ['images'],
+                    allowsEditing: true,
+                    aspect: [1, 1],
+                    quality: 0.8,
+                });
+            }
+
+            if (result.canceled || !result.assets?.[0]) return;
+
+            const asset = result.assets[0];
+            const mimeType = asset.mimeType || 'image/jpeg';
+
+            setUploadingPhoto(true);
+
+            // Upload to Storage
+            const { publicUrl } = await uploadToS3(asset.uri, mimeType, 'profile');
+
+            // Update profile in DB
+            const { error } = await supabase
+                .from('profiles')
+                .update({ profile_photo_url: publicUrl })
+                .eq('id', profile?.id);
+
+            if (error) throw error;
+
+            // Update local state
+            if (profile) {
+                setProfile({ ...profile, profile_photo_url: publicUrl });
+            }
+        } catch (err: any) {
+            Alert.alert('Error', err.message || 'Failed to update photo.');
+        } finally {
+            setUploadingPhoto(false);
+        }
+    };
+
+    const initial = (profile?.display_name || profile?.username || '?')[0].toUpperCase();
+
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -32,15 +159,60 @@ export default function ProfileScreen() {
 
                 {/* Profile info */}
                 <View style={styles.card}>
-                    <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>
-                            {(profile?.display_name || profile?.username || '?')[0].toUpperCase()}
-                        </Text>
-                    </View>
+                    {/* Avatar — tap to change photo */}
+                    <TouchableOpacity onPress={handleChangePhoto} disabled={uploadingPhoto}>
+                        {uploadingPhoto ? (
+                            <View style={styles.avatar}>
+                                <ActivityIndicator color={COLORS.accent} />
+                            </View>
+                        ) : profile?.profile_photo_url ? (
+                            <Image
+                                source={{ uri: profile.profile_photo_url }}
+                                style={styles.avatarImage}
+                            />
+                        ) : (
+                            <View style={styles.avatar}>
+                                <Text style={styles.avatarText}>{initial}</Text>
+                            </View>
+                        )}
+                        <View style={styles.cameraBadge}>
+                            <Text style={styles.cameraBadgeText}>📷</Text>
+                        </View>
+                    </TouchableOpacity>
+
                     <View style={styles.info}>
-                        <Text style={styles.displayName}>
-                            {profile?.display_name || profile?.username || 'Unknown'}
-                        </Text>
+                        {/* Display name — editable */}
+                        {editingName ? (
+                            <View style={styles.editRow}>
+                                <TextInput
+                                    style={styles.nameInput}
+                                    value={newName}
+                                    onChangeText={setNewName}
+                                    maxLength={50}
+                                    autoFocus
+                                    returnKeyType="done"
+                                    onSubmitEditing={handleSaveName}
+                                />
+                                <TouchableOpacity onPress={handleSaveName} disabled={savingName}>
+                                    {savingName ? (
+                                        <ActivityIndicator color={COLORS.accent} size="small" />
+                                    ) : (
+                                        <Text style={styles.saveBtn}>Save</Text>
+                                    )}
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => setEditingName(false)}>
+                                    <Text style={styles.cancelBtn}>✕</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ) : (
+                            <TouchableOpacity onPress={handleEditName} style={styles.nameRow}>
+                                <Text style={styles.displayName}>
+                                    {profile?.display_name || profile?.username || 'Unknown'}
+                                </Text>
+                                <Text style={styles.editIcon}>✏️</Text>
+                            </TouchableOpacity>
+                        )}
+
                         {profile?.username ? (
                             <Text style={styles.username}>@{profile.username}</Text>
                         ) : null}
@@ -131,15 +303,39 @@ const styles = StyleSheet.create({
         borderWidth: 1, borderColor: COLORS.border, flexDirection: 'row', alignItems: 'center', gap: 16,
     },
     avatar: {
-        width: 56, height: 56, borderRadius: 28,
+        width: 64, height: 64, borderRadius: 32,
         backgroundColor: COLORS.accentGlow, borderWidth: 2, borderColor: COLORS.accent,
         justifyContent: 'center', alignItems: 'center',
     },
-    avatarText: { fontFamily: 'Inter_700Bold', fontSize: 22, color: COLORS.accent },
+    avatarImage: {
+        width: 64, height: 64, borderRadius: 32,
+        borderWidth: 2, borderColor: COLORS.accent,
+    },
+    avatarText: { fontFamily: 'Inter_700Bold', fontSize: 24, color: COLORS.accent },
+    cameraBadge: {
+        position: 'absolute', bottom: -2, right: -2,
+        backgroundColor: COLORS.bgElevated, borderRadius: 10,
+        width: 22, height: 22, justifyContent: 'center', alignItems: 'center',
+        borderWidth: 1, borderColor: COLORS.border,
+    },
+    cameraBadgeText: { fontSize: 12 },
+
     info: { flex: 1 },
+    nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     displayName: { fontFamily: 'Inter_600SemiBold', fontSize: 18, color: COLORS.textPrimary },
+    editIcon: { fontSize: 14 },
     username: { fontFamily: 'Inter_400Regular', fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
     email: { fontFamily: 'Inter_400Regular', fontSize: 13, color: COLORS.textMuted, marginTop: 2 },
+
+    // Edit name inline
+    editRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    nameInput: {
+        flex: 1, fontFamily: 'Inter_500Medium', fontSize: 16, color: COLORS.textPrimary,
+        backgroundColor: COLORS.bgInput, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6,
+        borderWidth: 1, borderColor: COLORS.accent,
+    },
+    saveBtn: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: COLORS.accent },
+    cancelBtn: { fontSize: 16, color: COLORS.textMuted, paddingHorizontal: 4 },
 
     // Stats
     statsCard: {

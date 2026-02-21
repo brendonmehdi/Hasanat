@@ -149,7 +149,13 @@ export function useDeletePost() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ postId }: { postId: string }) => {
+        mutationFn: async ({ postId, imageKey }: { postId: string; imageKey?: string }) => {
+            // Delete image from Storage if we have the key
+            if (imageKey) {
+                await supabase.storage.from('uploads').remove([imageKey]);
+            }
+
+            // Delete the post from DB
             const { error } = await supabase
                 .from('iftar_posts')
                 .delete()
