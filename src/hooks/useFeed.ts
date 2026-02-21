@@ -141,3 +141,24 @@ export function useCreatePost() {
         },
     });
 }
+
+/**
+ * Delete an iftar post (own posts only).
+ */
+export function useDeletePost() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({ postId }: { postId: string }) => {
+            const { error } = await supabase
+                .from('iftar_posts')
+                .delete()
+                .eq('id', postId);
+
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['feed'] });
+        },
+    });
+}

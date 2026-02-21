@@ -111,10 +111,11 @@ serve(async (req: Request) => {
             JSON.stringify({ success: true, post }),
             { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
-    } catch (err) {
+    } catch (err: any) {
         console.error('create-iftar-post error:', err);
+        const message = err?.message || err?.details || String(err);
         return new Response(
-            JSON.stringify({ error: 'Internal server error' }),
+            JSON.stringify({ error: message }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
     }

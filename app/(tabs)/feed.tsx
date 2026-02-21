@@ -4,10 +4,11 @@ import {
     View, Text, TouchableOpacity, StyleSheet,
     FlatList, TextInput, Alert, ActivityIndicator,
     RefreshControl, Image, Modal, KeyboardAvoidingView, Platform,
+    ActionSheetIOS,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { useFeed, useReactToPost, useCommentOnPost, useCreatePost, usePostComments } from '../../src/hooks/useFeed';
+import { useFeed, useReactToPost, useCommentOnPost, useCreatePost, usePostComments, useDeletePost } from '../../src/hooks/useFeed';
 import { uploadToS3 } from '../../src/lib/s3';
 import { useAuthStore } from '../../src/stores/authStore';
 import { COLORS, REACTION_EMOJI, MAX_CAPTION_LENGTH, MAX_COMMENT_LENGTH } from '../../src/constants';
@@ -117,9 +118,14 @@ function CommentSheet({
 }
 
 // ─── Post Card ─────────────────────────────────────────────────
-function PostCard({ post, onComment }: { post: any; onComment: (id: string) => void }) {
+function PostCard({ post, onComment, onDelete }: {
+    post: any;
+    onComment: (id: string) => void;
+    onDelete: (id: string) => void;
+}) {
     const userId = useAuthStore((s) => s.session?.user?.id);
     const reactToPost = useReactToPost();
+    const isOwner = userId === post.user_id;
 
     const reactionCounts = useMemo(() => {
         const counts: Partial<Record<ReactionType, number>> = {};
@@ -150,6 +156,15 @@ function PostCard({ post, onComment }: { post: any; onComment: (id: string) => v
                     </Text>
                     <Text style={styles.postTime}>{timeAgo(post.created_at)}</Text>
                 </View>
+                {/* Delete button for own posts */}
+                {isOwner && (
+                    <TouchableOpacity
+                        style={styles.deleteBtn}
+                        onPress={() => onDelete(post.id)}
+                    >
+                        <Text style={styles.deleteBtnText}>🗑️</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
             {/* Image */}
@@ -191,7 +206,7 @@ function PostCard({ post, onComment }: { post: any; onComment: (id: string) => v
 
                 {/* Comment button */}
                 <TouchableOpacity
-                    style={styles.commentBtn}
+                    style={styles.commentBtnRow}
                     onPress={() => onComment(post.id)}
                 >
                     <Text style={styles.reactionEmoji}>💬</Text>
@@ -208,6 +223,7 @@ function PostCard({ post, onComment }: { post: any; onComment: (id: string) => v
 export default function FeedScreen() {
     const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } = useFeed();
     const createPost = useCreatePost();
+    const deletePost = useDeletePost();
 
     const [commentPostId, setCommentPostId] = useState<string | null>(null);
     const [uploading, setUploading] = useState(false);
@@ -215,47 +231,114 @@ export default function FeedScreen() {
 
     const posts = useMemo(() => data?.pages.flat() || [], [data]);
 
+    // ─── Pick image source (Camera or Library) ──────────────
     const handleNewPost = useCallback(async () => {
+        if (Platform.OS === 'ios') {
+            ActionSheetIOS.showActionSheetWithOptions(
+                {
+                    options: ['Cancel', '📷 Take Photo', '🖼️ Choose from Library'],
+                    cancelButtonIndex: 0,
+                },
+                (buttonIndex) => {
+                    if (buttonIndex === 1) pickImage('camera');
+                    if (buttonIndex === 2) pickImage('library');
+                },
+            );
+        } else {
+            // Android fallback
+            Alert.alert('New Post', 'Choose an option', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: '📷 Take Photo', onPress: () => pickImage('camera') },
+                { text: '🖼️ Choose from Library', onPress: () => pickImage('library') },
+            ]);
+        }
+    }, []);
+
+    const pickImage = async (source: 'camera' | 'library') => {
         try {
-            // Pick image
-            const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['images'],
-                allowsEditing: true,
-                aspect: [1, 1],
-                quality: 0.8,
-            });
+            let result: ImagePicker.ImagePickerResult;
+
+            if (source === 'camera') {
+                const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                if (status !== 'granted') {
+                    Alert.alert('Permission needed', 'Camera access is required to take photos.');
+                    return;
+                }
+                result = await ImagePicker.launchCameraAsync({
+                    allowsEditing: true,
+                    aspect: [1, 1],
+                    quality: 0.8,
+                });
+            } else {
+                result = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ['images'],
+                    allowsEditing: true,
+                    aspect: [1, 1],
+                    quality: 0.8,
+                });
+            }
 
             if (result.canceled || !result.assets?.[0]) return;
 
             const asset = result.assets[0];
             const mimeType = asset.mimeType || 'image/jpeg';
 
-            // Ask for caption
-            Alert.prompt?.(
-                'Add Caption',
-                'Optional caption for your iftar meal',
-                [
-                    { text: 'Skip', onPress: () => doUpload(asset.uri, mimeType, undefined) },
-                    { text: 'Post', onPress: (caption) => doUpload(asset.uri, mimeType, caption) },
-                ],
-                'plain-text',
-            ) || doUpload(asset.uri, mimeType, undefined);
+            // Ask for caption — only post once via the callback
+            promptForCaption(asset.uri, mimeType);
         } catch (err: any) {
             Alert.alert('Error', err.message || 'Could not select image.');
         }
-    }, []);
+    };
+
+    const promptForCaption = (uri: string, contentType: string) => {
+        if (Platform.OS === 'ios' && Alert.prompt) {
+            Alert.prompt(
+                'Add Caption',
+                'Optional caption for your iftar meal',
+                [
+                    { text: 'Skip', onPress: () => doUpload(uri, contentType, undefined) },
+                    { text: 'Post', onPress: (caption: string) => doUpload(uri, contentType, caption) },
+                ],
+                'plain-text',
+            );
+        } else {
+            // Android: no Alert.prompt, just upload without caption
+            doUpload(uri, contentType, undefined);
+        }
+    };
 
     const doUpload = async (uri: string, contentType: string, caption?: string) => {
         setUploading(true);
         try {
-            const { objectKey } = await uploadToS3(uri, contentType, 'iftar');
-            await createPost.mutateAsync({ imageKey: objectKey, caption });
+            const { objectKey, publicUrl } = await uploadToS3(uri, contentType, 'iftar');
+            await createPost.mutateAsync({ imageKey: objectKey, imageUrl: publicUrl, caption });
             Alert.alert('Posted! 🍽️', 'Your iftar post has been shared with friends.');
         } catch (err: any) {
             Alert.alert('Error', err.message || 'Failed to upload post.');
         } finally {
             setUploading(false);
         }
+    };
+
+    const handleDelete = (postId: string) => {
+        Alert.alert(
+            'Delete Post',
+            'Are you sure you want to delete this post?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await deletePost.mutateAsync({ postId });
+                        } catch (err: any) {
+                            Alert.alert('Error', err.message || 'Failed to delete post.');
+                        }
+                    },
+                },
+            ],
+        );
     };
 
     const onRefresh = async () => {
@@ -291,7 +374,7 @@ export default function FeedScreen() {
                     data={posts}
                     keyExtractor={(item) => item.id}
                     renderItem={({ item }) => (
-                        <PostCard post={item} onComment={setCommentPostId} />
+                        <PostCard post={item} onComment={setCommentPostId} onDelete={handleDelete} />
                     )}
                     contentContainerStyle={styles.listContent}
                     onEndReached={() => {
@@ -369,6 +452,11 @@ const styles = StyleSheet.create({
     postAuthorName: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: COLORS.textPrimary },
     postTime: { fontFamily: 'Inter_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 1 },
 
+    deleteBtn: {
+        padding: 6,
+    },
+    deleteBtnText: { fontSize: 18 },
+
     postImage: { width: '100%', aspectRatio: 1, backgroundColor: COLORS.bgElevated },
 
     postCaption: {
@@ -391,7 +479,7 @@ const styles = StyleSheet.create({
     reactionEmoji: { fontSize: 16 },
     reactionCount: { fontFamily: 'Inter_500Medium', fontSize: 12, color: COLORS.textSecondary },
     reactionCountActive: { color: COLORS.accent },
-    commentBtn: {
+    commentBtnRow: {
         flexDirection: 'row', alignItems: 'center', gap: 3,
         paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8,
         backgroundColor: COLORS.bgElevated, marginLeft: 'auto',
