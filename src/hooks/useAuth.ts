@@ -16,13 +16,20 @@ export function useAuth() {
             .single();
 
         if (error) {
+            // PGRST116 = 0 rows → user was deleted from DB
+            if (error.code === 'PGRST116') {
+                console.warn('Profile not found — signing out stale session.');
+                await supabase.auth.signOut();
+                clearStore();
+                return null;
+            }
             console.error('Error fetching profile:', error);
             return null;
         }
 
         setProfile(data as Profile);
         return data as Profile;
-    }, [setProfile]);
+    }, [setProfile, clearStore]);
 
     // Initialize auth state — listen for session changes
     useEffect(() => {

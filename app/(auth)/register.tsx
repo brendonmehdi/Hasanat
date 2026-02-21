@@ -36,10 +36,21 @@ export default function RegisterScreen() {
 
         setLoading(true);
         try {
-            await signUp(email.trim(), password);
+            const result = await signUp(email.trim(), password);
+
+            // If Supabase has email confirmation disabled, the user is immediately
+            // signed in and the auth guard will redirect to onboarding.
+            // If confirmation IS enabled, the session won't exist yet.
+            if (result.session) {
+                // Auto-confirmed → auth guard will handle redirect to onboarding
+                return;
+            }
+
+            // Email confirmation needed
             Alert.alert(
-                'Account Created! 🎉',
-                'Your account has been created. Let\'s set up your profile.',
+                'Check Your Email 📧',
+                'We sent a confirmation link to your email. After confirming, come back and sign in.',
+                [{ text: 'OK', onPress: () => router.back() }],
             );
         } catch (error: any) {
             Alert.alert('Registration Failed', error.message || 'An error occurred.');

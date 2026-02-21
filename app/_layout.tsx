@@ -19,29 +19,43 @@ const queryClient = new QueryClient({
 
 function AuthGuard() {
     const { session, isLoading, isOnboarded } = useAuth();
-    const segments = useSegments();
+    const rawSegments = useSegments() as string[];
     const router = useRouter();
 
     useEffect(() => {
         if (isLoading) return;
 
-        const inAuthGroup = segments[0] === '(auth)';
+        const inAuthGroup = rawSegments[0] === '(auth)';
+        const inTabsGroup = rawSegments[0] === '(tabs)';
 
-        if (!session && !inAuthGroup) {
-            // Not signed in → go to login
-            router.replace('/(auth)/login');
-        } else if (session && inAuthGroup) {
-            // Signed in but in auth screens — check onboarding
-            if (isOnboarded) {
-                router.replace('/(tabs)/home');
-            } else {
-                router.replace('/(auth)/onboarding');
+        // Determine where the user SHOULD be
+        let targetRoute: string | null = null;
+
+        if (!session) {
+            // Not signed in → should be in auth group
+            if (!inAuthGroup) {
+                targetRoute = '/(auth)/login';
             }
-        } else if (session && !isOnboarded && segments[0] !== '(auth)') {
-            // Signed in, not onboarded, but trying to access main app
-            router.replace('/(auth)/onboarding');
+        } else if (!isOnboarded) {
+            // Signed in but not onboarded → should be on onboarding
+            // Only redirect if NOT already on the onboarding screen
+            const currentScreen = rawSegments[1];
+            if (currentScreen !== 'onboarding') {
+                targetRoute = '/(auth)/onboarding';
+            }
+        } else {
+            // Signed in AND onboarded → should be in tabs
+            if (inAuthGroup) {
+                targetRoute = '/(tabs)/home';
+            }
         }
-    }, [session, isLoading, isOnboarded, segments]);
+
+        // Only navigate if we actually need to change routes
+        if (targetRoute) {
+            router.replace(targetRoute as any);
+        }
+    }, [session, isLoading, isOnboarded]);
+    // NOTE: removed `segments` from deps to prevent re-fire loop
 
     if (isLoading) {
         return (

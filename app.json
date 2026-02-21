@@ -52,6 +52,12 @@
           "icon": "./assets/icon.png",
           "color": "#C084FC"
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Hasanat to access your photos to share iftar meals."
+        }
       ]
     ]
   }
