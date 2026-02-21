@@ -1,0 +1,51 @@
+# supabase/config.toml — Supabase project configuration
+# Docs: https://supabase.com/docs/guides/cli/config
+
+[project]
+id = "hasanat"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+
+[db]
+port = 54322
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+site_url = "http://localhost:8081"
+additional_redirect_urls = ["hasanat://"]
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false  # Disable email confirmation for dev
+
+# =============================================================================
+# EDGE FUNCTION SCHEDULING (Cron Jobs)
+# =============================================================================
+# missed-prayer-job: Runs every 15 minutes
+# This is the cron-authoritative source of truth for missed prayer detection.
+# It checks all users' prayers whose end window has passed with no prayer_log.
+# Max notification delay: 15 minutes after prayer window closes.
+#
+# Supabase Cron Trigger configuration:
+# This is configured in the Supabase Dashboard under:
+#   Database → Extensions → pg_cron → Add Job
+# OR via the SQL migration below (add to a migration file):
+#
+# SELECT cron.schedule(
+#   'missed-prayer-job',     -- job name
+#   '*/15 * * * *',          -- every 15 minutes
+#   $$
+#   SELECT net.http_post(
+#     url := 'https://<PROJECT_REF>.supabase.co/functions/v1/missed-prayer-job',
+#     headers := '{"Authorization": "Bearer <SERVICE_ROLE_KEY>"}'::jsonb,
+#     body := '{}'::jsonb
+#   ) AS request_id;
+#   $$
+# );
