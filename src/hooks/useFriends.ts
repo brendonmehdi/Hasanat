@@ -45,7 +45,8 @@ export function useFriendsList() {
             return (profiles || []) as FriendWithProfile[];
         },
         enabled: !!profile?.id,
-        staleTime: 1000 * 60 * 5,
+        staleTime: 1000 * 30,
+        refetchOnWindowFocus: true,
     });
 }
 
@@ -74,7 +75,8 @@ export function usePendingRequests() {
             return (data || []) as PendingRequest[];
         },
         enabled: !!profile?.id,
-        staleTime: 1000 * 60 * 2,
+        staleTime: 1000 * 30,
+        refetchOnWindowFocus: true,
     });
 }
 
@@ -88,7 +90,7 @@ export function useSendFriendRequest() {
 
     return useMutation({
         mutationFn: async ({ username }: { username: string }) => {
-            return invokeEdgeFunction('friend-request', { username });
+            return invokeEdgeFunction('friend-request', { toUsername: username });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['friends'] });

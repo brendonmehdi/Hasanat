@@ -87,7 +87,7 @@ export function usePostComments(postId: string) {
             return data as any;
         },
         enabled: !!postId,
-        staleTime: 1000 * 60,
+        staleTime: 0,
     });
 }
 

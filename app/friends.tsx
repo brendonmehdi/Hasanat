@@ -2,7 +2,7 @@
 import { useState, useCallback } from 'react';
 import {
     View, Text, TextInput, TouchableOpacity, StyleSheet,
-    FlatList, Alert, ActivityIndicator,
+    FlatList, Alert, ActivityIndicator, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -30,9 +30,13 @@ function RequestRow({
 
     return (
         <View style={styles.friendRow}>
-            <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{initial}</Text>
-            </View>
+            {fromProfile?.profile_photo_url ? (
+                <Image source={{ uri: fromProfile.profile_photo_url }} style={styles.avatarImage} />
+            ) : (
+                <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>{initial}</Text>
+                </View>
+            )}
             <View style={styles.friendInfo}>
                 <Text style={styles.friendName}>
                     {fromProfile?.display_name || fromProfile?.username}
@@ -106,9 +110,13 @@ function FriendRow({
             onLongPress={handleLongPress}
             activeOpacity={0.7}
         >
-            <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{initial}</Text>
-            </View>
+            {friend.profile_photo_url ? (
+                <Image source={{ uri: friend.profile_photo_url }} style={styles.avatarImage} />
+            ) : (
+                <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>{initial}</Text>
+                </View>
+            )}
             <View style={styles.friendInfo}>
                 <Text style={styles.friendName}>
                     {friend.display_name || friend.username}
@@ -325,6 +333,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center', alignItems: 'center',
     },
     avatarText: { fontFamily: 'Inter_700Bold', fontSize: 18, color: COLORS.accent },
+    avatarImage: {
+        width: 44, height: 44, borderRadius: 22,
+        borderWidth: 1.5, borderColor: COLORS.accent,
+    },
     friendInfo: { flex: 1 },
     friendName: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: COLORS.textPrimary },
     friendUsername: { fontFamily: 'Inter_400Regular', fontSize: 13, color: COLORS.textSecondary, marginTop: 1 },

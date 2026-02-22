@@ -18,13 +18,10 @@
             }
         },
         "production": {
+            "autoIncrement": true,
             "ios": {
                 "simulator": false
-            },
-            "env": {
-                "EAS_BUILD_RUNNER": "eas-build"
-            },
-            "prebuildCommand": "mkdir -p .expo/web"
+            }
         }
     },
     "submit": {

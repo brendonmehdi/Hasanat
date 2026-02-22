@@ -147,9 +147,16 @@ function PostCard({ post, onComment, onDelete }: {
         <View style={styles.postCard}>
             {/* Author */}
             <View style={styles.postHeader}>
-                <View style={styles.postAvatar}>
-                    <Text style={styles.postAvatarText}>{initial}</Text>
-                </View>
+                {post.profile?.profile_photo_url ? (
+                    <Image
+                        source={{ uri: post.profile.profile_photo_url }}
+                        style={styles.postAvatarImage}
+                    />
+                ) : (
+                    <View style={styles.postAvatar}>
+                        <Text style={styles.postAvatarText}>{initial}</Text>
+                    </View>
+                )}
                 <View style={styles.postAuthorInfo}>
                     <Text style={styles.postAuthorName}>
                         {post.profile?.display_name || post.profile?.username}
@@ -448,6 +455,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center', alignItems: 'center',
     },
     postAvatarText: { fontFamily: 'Inter_700Bold', fontSize: 14, color: COLORS.accent },
+    postAvatarImage: {
+        width: 36, height: 36, borderRadius: 18,
+        borderWidth: 1.5, borderColor: COLORS.accent,
+    },
     postAuthorInfo: { flex: 1 },
     postAuthorName: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: COLORS.textPrimary },
     postTime: { fontFamily: 'Inter_400Regular', fontSize: 12, color: COLORS.textMuted, marginTop: 1 },

@@ -16,7 +16,7 @@ export function useWeeklyLeaderboard() {
             if (!profile?.id) throw new Error('Not authenticated');
 
             const { data, error } = await supabase
-                .rpc('fn_get_weekly_leaderboard', { target_user_id: profile.id });
+                .rpc('fn_get_weekly_leaderboard', { requesting_user_id: profile.id });
 
             if (error) throw error;
             return (data || []) as LeaderboardEntry[];
@@ -38,7 +38,7 @@ export function useAllTimeLeaderboard() {
             if (!profile?.id) throw new Error('Not authenticated');
 
             const { data, error } = await supabase
-                .rpc('fn_get_alltime_leaderboard', { target_user_id: profile.id });
+                .rpc('fn_get_alltime_leaderboard', { requesting_user_id: profile.id });
 
             if (error) throw error;
             return (data || []) as LeaderboardEntry[];

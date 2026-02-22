@@ -2,7 +2,7 @@
 import { useState, useMemo } from 'react';
 import {
     View, Text, TouchableOpacity, StyleSheet,
-    FlatList, ActivityIndicator, RefreshControl,
+    FlatList, ActivityIndicator, RefreshControl, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -36,12 +36,22 @@ function RankRow({ entry, rank, isCurrentUser }: {
             </View>
 
             {/* Avatar */}
-            <View style={[
-                styles.avatar,
-                rank <= 3 && { borderColor: MEDAL_COLOR[rank - 1] },
-            ]}>
-                <Text style={styles.avatarText}>{initial}</Text>
-            </View>
+            {entry.profile_photo_url ? (
+                <Image
+                    source={{ uri: entry.profile_photo_url }}
+                    style={[
+                        styles.avatarImage,
+                        rank <= 3 && { borderColor: MEDAL_COLOR[rank - 1] },
+                    ]}
+                />
+            ) : (
+                <View style={[
+                    styles.avatar,
+                    rank <= 3 && { borderColor: MEDAL_COLOR[rank - 1] },
+                ]}>
+                    <Text style={styles.avatarText}>{initial}</Text>
+                </View>
+            )}
 
             {/* Info */}
             <View style={styles.userInfo}>
@@ -224,6 +234,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center', alignItems: 'center',
     },
     avatarText: { fontFamily: 'Inter_700Bold', fontSize: 16, color: COLORS.accent },
+    avatarImage: {
+        width: 40, height: 40, borderRadius: 20,
+        borderWidth: 1.5, borderColor: COLORS.accent,
+    },
 
     userInfo: { flex: 1 },
     userName: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: COLORS.textPrimary },
