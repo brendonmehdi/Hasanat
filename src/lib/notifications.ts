@@ -1,6 +1,7 @@
 // src/lib/notifications.ts — Push notification registration
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
@@ -40,10 +41,15 @@ export async function registerForPushNotifications(userId: string): Promise<stri
         return null;
     }
 
+    // Resolve projectId explicitly — don't pass undefined
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    if (!projectId) {
+        console.error('Missing EAS projectId in app.json — push token registration will fail.');
+        return null;
+    }
+
     // Get Expo push token
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-        projectId: undefined, // Uses projectId from app.json automatically
-    });
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     const token = tokenData.data;
 
     // Store in Supabase (upsert to handle re-registrations)

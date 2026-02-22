@@ -1,11 +1,13 @@
 // app/_layout.tsx — Root layout with auth guard, React Query, and font loading
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useAuth } from '../src/hooks/useAuth';
+import { usePrayerTimes } from '../src/hooks/usePrayerTimes';
+import { useNotificationSetup } from '../src/hooks/useNotificationSetup';
 import { COLORS } from '../src/constants';
 
 const queryClient = new QueryClient({
@@ -21,6 +23,12 @@ function AuthGuard() {
     const { session, isLoading, isOnboarded } = useAuth();
     const rawSegments = useSegments() as string[];
     const router = useRouter();
+
+    // ─── Notification setup ─────────────────────────────────────
+    const userId = session?.user?.id;
+    const today = useMemo(() => new Date(), []);
+    const { data: prayerTimings } = usePrayerTimes(today);
+    useNotificationSetup(userId, prayerTimings);
 
     useEffect(() => {
         if (isLoading) return;
