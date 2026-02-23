@@ -184,4 +184,4 @@ Push tokens are registered automatically on login and refreshed when the app ret
 
 ## License
 
-This project is private and not licensed for redistribution.
+Apache-2.0
