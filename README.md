@@ -183,5 +183,14 @@ The app supports both local and remote push notifications:
 Push tokens are registered automatically on login and refreshed when the app returns to foreground.
 
 ## License
+Hasanat
 
-Apache-2.0
+Copyright 2026 Ali Brendon Mehdi
+
+This product includes software developed by Ali Brendon Mehdi.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
